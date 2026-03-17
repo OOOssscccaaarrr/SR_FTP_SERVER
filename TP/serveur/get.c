@@ -1,9 +1,9 @@
 /*
  * echo - read and echo text lines until client closes connection
  */
-#include "csapp.h"
+#include "../utilitaire/csapp.h"
 
-void ftp_echo(char *nomFichier)
+void get(char *nomFichier)
 {
     size_t n;
     char buf[MAXLINE];

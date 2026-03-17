@@ -3,6 +3,7 @@
 # Disable implicit rules
 .SUFFIXES:
 
+VPATH = client serveur utilitaire
 # Keep intermediate files
 #.PRECIOUS: %.o
 
@@ -15,11 +16,11 @@ LDFLAGS =
 #LIBS += -lsocket -lnsl -lrt
 LIBS += -lpthread
 
-INCLUDE = csapp.h
-OBJS = csapp.o echo.o ftp_echo.o
-INCLDIR = -I.
+INCLUDE = csapp.h structures.h
+OBJS = csapp.o get.o structures.o
+INCLDIR = -I. -Iutilitaire -Iserveur -Iclient
 
-PROGS = echoserveri echoclient fork_echoserveri pool_echoserveri ftp_serv ftp_client
+PROGS =  serveur/ftp_serv client/ftp_client
 
 
 all: $(PROGS)
