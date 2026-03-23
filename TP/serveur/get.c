@@ -1,18 +1,24 @@
 /*
  * echo - read and echo text lines until client closes connection
  */
-#include "../utilitaire/csapp.h"
+#include "../utilitaire/structures.h"
 
-void get(char *nomFichier)
+int get(char *nomFichier, int fd_cible)
 {
-    size_t n;
-    char buf[MAXLINE];
-    rio_t rio;
+
     printf("Demande de lecture de : [%s]\n",nomFichier);
-    int fd = Open(nomFichier, O_RDONLY, S_IRUSR);
-    Rio_readinitb(&rio, fd);
-    while ((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0) {
-        printf("%s", buf);
+    int fd_origine = open(nomFichier, O_RDONLY, S_IRUSR);
+    Rio_readinitb(&rio_origine, fd_origine);
+
+    while ((n = Rio_readlineb(&rio_origine, buf, MAX_PAQ_LEN)) != 0) {
+        Rio_writen(fd_cible, buf, n);
+        if (n < MAX_PAQ_LEN) {
+            Close(fd_origine);
+            return 1;
+        }
     }
+
+    Close(fd_origine);
+    return 0;
 }
 

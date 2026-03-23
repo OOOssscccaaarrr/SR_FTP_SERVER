@@ -24,6 +24,16 @@ void sigint_hdlr(int signum){
 }
 
 
+reponse_t reponse_err(int connfd,typerep_t type){
+    reponse_t rep;
+    rep.reponse = type;
+    rep.nb_paquets = 0;
+    rep.paquet = (paquet_t) {0};
+    Rio_writen(connfd, &rep, sizeof(reponse_t));
+    Close(connfd);
+    return rep;
+}
+
 
 /* 
  * Note that this code only works with IPv4 addresses
@@ -51,6 +61,9 @@ int main()
     for (int i = 0; i < NPROC  && ((pid[i] = Fork()) != 0); i++){
         printf("fils crée : %d\n", i);
     }
+
+    request_t req;
+    reponse_t rep;
     
     while (1) {
         if (pid_pere != getpid()){
@@ -69,13 +82,59 @@ int main()
                 client_ip_string);
             rio_t rio;
             Rio_readinitb(&rio, connfd);
-            Rio_readlineb(&rio, buf, MAXBUF); 
-            for (int i = 0; buf[i] != '\0' ;i++){
-                if (buf[i] == '\n'){
-                    buf[i] = '\0';
+            Rio_readlineb(&rio, &req, MAXBUF);
+            if (req.type != GET){
+                rep = reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
+                printf("Requête de %s invalide\n", client_hostname);
+                continue;
+            } 
+            else {
+                int fd_origine = open(req.nomFichier, O_RDONLY, S_IRUSR);
+                struct stat st;
+                if (fstat(fd_origine, &st) < 0){
+                
                 }
+                if (fd_origine < 0){
+                    rep = reponse_err(connfd, ERREUR_FICHIER_INEXISTANT);
+                    printf("Le fichier demandé par %s n'existe pas\n", client_hostname);
+                    continue;
+                }
+                if (access(req.nomFichier, R_OK) < 0){
+                    rep = reponse_err(connfd, ERREUR_FICHIER_INACCESSIBLE);
+                    printf("Le fichier demandé par %s n'est pas accessible\n", client_hostname);
+                    continue;
+                }
+                rep.reponse = ACK;
+                
+                off_t taille = st.st_size;
+                rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
+                int compteur_paquet = 0;
+                Rio_writen(connfd, &rep, sizeof(reponse_t));
+
+
+                size_t n;
+                char buf[MAX_PAQ_LEN];
+                rio_t rio_origine;
+                
+                Rio_readinitb(&rio_origine, fd_origine);
+                while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
+                    if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer
+                        printf("Erreur : nombre de paquets dépassé\n");
+                        rep = reponse_err(connfd, ERREUR_SERVEUR);
+                        break;
+                    }
+                    paquet_t paquet;
+                    paquet.taille_buffer = n;
+                    paquet.numero_paquet = compteur_paquet++;
+                    memcpy(paquet.buffer, buf, n);
+                    rep.paquet = paquet;
+                    rep.reponse = ENVOIE_FICHIER;
+                    Rio_writen(connfd, &rep, sizeof(reponse_t));
+                }
+                Close(fd_origine);
             }
-            get(buf);
+            
+            
             Close(connfd);
         }
     }
