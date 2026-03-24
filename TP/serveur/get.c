@@ -5,7 +5,9 @@
 
 int get(char *nomFichier, int fd_cible)
 {
-
+    rio_t rio_origine;
+    char buf[MAX_PAQ_LEN];
+    ssize_t n;
     printf("Demande de lecture de : [%s]\n",nomFichier);
     int fd_origine = open(nomFichier, O_RDONLY, S_IRUSR);
     Rio_readinitb(&rio_origine, fd_origine);

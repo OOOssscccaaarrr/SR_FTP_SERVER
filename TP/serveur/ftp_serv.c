@@ -24,14 +24,20 @@ void sigint_hdlr(int signum){
 }
 
 
-reponse_t reponse_err(int connfd,typerep_t type){
+void reponse_err(int connfd, typerep_t type){
     reponse_t rep;
     rep.reponse = type;
     rep.nb_paquets = 0;
     rep.paquet = (paquet_t) {0};
     Rio_writen(connfd, &rep, sizeof(reponse_t));
-    Close(connfd);
-    return rep;
+}
+
+void afficher_message(int numero_fils, char* client_hostname, char* message, char* argument){
+    if (argument){
+        printf("[Fils %d] : %s : %s : %s\n", numero_fils, client_hostname, message, argument);
+        return;
+    }
+    printf("[Fils %d] : %s : %s\n", numero_fils, client_hostname, message);
 }
 
 
@@ -48,8 +54,10 @@ int main()
     struct sockaddr_in clientaddr;
     char client_ip_string[INET_ADDRSTRLEN];
     char client_hostname[MAX_NAME_LEN];
-    char buf[MAXBUF];
+    request_t req;
+    reponse_t rep;
     pid_pere = getpid();
+
     for (int i = 0; i < NPROC ; i++){
         pid[i]= 0;
     }
@@ -59,15 +67,20 @@ int main()
 
     listenfd = Open_listenfd(PORT);
     for (int i = 0; i < NPROC  && ((pid[i] = Fork()) != 0); i++){
-        printf("fils crée : %d\n", i);
+        printf("[PERE] fils crée : %d\n", i);
     }
-
-    request_t req;
-    reponse_t rep;
     
     while (1) {
+        int numero_fils = -1;
         if (pid_pere != getpid()){
-
+            // Fils
+           
+            for (int i = 0; i < NPROC ; i++){
+                if (pid[i] == getpid()){
+                    numero_fils = i;
+                    break;
+                }
+            }
             connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
                 
             /* determine the name of the client */
@@ -78,64 +91,90 @@ int main()
             Inet_ntop(AF_INET, &clientaddr.sin_addr, client_ip_string,
                     INET_ADDRSTRLEN);
             
-            printf("server connected to %s (%s)\n", client_hostname,
+            printf("Server connecté à %s (%s)\n", client_hostname,
                 client_ip_string);
+
+            // Initialisation de rio
             rio_t rio;
             Rio_readinitb(&rio, connfd);
-            Rio_readlineb(&rio, &req, MAXBUF);
-            if (req.type != GET){
-                rep = reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
-                printf("Requête de %s invalide\n", client_hostname);
+            if (Rio_readnb(&rio, &req, sizeof(request_t)) != sizeof(request_t)) {
+                reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
+                Close(connfd);
+                afficher_message(numero_fils, client_hostname, "Erreur lecture requête", NULL);
                 continue;
-            } 
-            else {
-                int fd_origine = open(req.nomFichier, O_RDONLY, S_IRUSR);
-                struct stat st;
-                if (fstat(fd_origine, &st) < 0){
-                
-                }
-                if (fd_origine < 0){
-                    rep = reponse_err(connfd, ERREUR_FICHIER_INEXISTANT);
-                    printf("Le fichier demandé par %s n'existe pas\n", client_hostname);
-                    continue;
-                }
-                if (access(req.nomFichier, R_OK) < 0){
-                    rep = reponse_err(connfd, ERREUR_FICHIER_INACCESSIBLE);
-                    printf("Le fichier demandé par %s n'est pas accessible\n", client_hostname);
-                    continue;
-                }
-                rep.reponse = ACK;
-                
-                off_t taille = st.st_size;
-                rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
-                int compteur_paquet = 0;
-                Rio_writen(connfd, &rep, sizeof(reponse_t));
-
-
-                size_t n;
-                char buf[MAX_PAQ_LEN];
-                rio_t rio_origine;
-                
-                Rio_readinitb(&rio_origine, fd_origine);
-                while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
-                    if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer
-                        printf("Erreur : nombre de paquets dépassé\n");
-                        rep = reponse_err(connfd, ERREUR_SERVEUR);
-                        break;
-                    }
-                    paquet_t paquet;
-                    paquet.taille_buffer = n;
-                    paquet.numero_paquet = compteur_paquet++;
-                    memcpy(paquet.buffer, buf, n);
-                    rep.paquet = paquet;
-                    rep.reponse = ENVOIE_FICHIER;
-                    Rio_writen(connfd, &rep, sizeof(reponse_t));
-                }
-                Close(fd_origine);
             }
             
+            afficher_message(numero_fils, client_hostname, "requête reçue",(char *) req.type);
+            afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
+            if (req.type == FERMETURE){
+                afficher_message(numero_fils, client_hostname, "Déconnexion du client", NULL);
+                Close(connfd);
+                continue;
+            }
+            int fd_origine = open(req.nomFichier, O_RDONLY);
+            if (fd_origine < 0) {
+                if (errno == ENOENT) {
+                    reponse_err(connfd, ERREUR_FICHIER_INEXISTANT);
+                    Close(connfd);
+                    afficher_message(numero_fils, client_hostname, "Le fichier demandé n'existe pas", NULL);
+                } else if (errno == EACCES) {
+                    reponse_err(connfd, ERREUR_FICHIER_INACCESSIBLE);
+                    Close(connfd);
+                    afficher_message(numero_fils, client_hostname, "Le fichier demandé n'est pas accessible", NULL);    
+                } else {
+                    reponse_err(connfd, ERREUR_SERVEUR);
+                    Close(connfd);
+                    afficher_message(numero_fils, client_hostname, "Erreur serveur lors de l'ouverture du fichier", NULL);
+                }
+                continue;
+            }
+
+            struct stat st;
+            if (fstat(fd_origine, &st) < 0) {
+                perror("fstat");
+                reponse_err(connfd, ERREUR_SERVEUR);
+                Close(connfd);
+                close(fd_origine);
+                continue;
+            }
+            afficher_message(numero_fils, client_hostname, "Le fichier demandé existe et est accessible", NULL);
+            rep.reponse = ACK;
             
+            off_t taille = st.st_size;
+            rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
+            int compteur_paquet = 0;
+            Rio_writen(connfd, &rep, sizeof(reponse_t));
+
+
+            size_t n;
+            char buf[MAX_PAQ_LEN];
+            rio_t rio_origine;
+            
+            Rio_readinitb(&rio_origine, fd_origine);
+            afficher_message(numero_fils, client_hostname, "Envoi des paquets", NULL);
+            while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
+                if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer*
+                    afficher_message(numero_fils, client_hostname, " [ERREUR] Nombre de paquets dépassé", NULL);
+                    reponse_err(connfd, ERREUR_SERVEUR);
+                    Close(connfd);
+                    break;
+                }
+                paquet_t paquet;
+                paquet.taille_buffer = n;
+                paquet.numero_paquet = compteur_paquet++;
+                memcpy(paquet.buffer, buf, n);
+                rep.paquet = paquet;
+                rep.reponse = ENVOIE_FICHIER;
+                Rio_writen(connfd, &rep, sizeof(reponse_t));              
+            }
+
+            afficher_message(numero_fils, client_hostname, "Fichier envoyé", NULL);
+            Close(fd_origine);
+            afficher_message(numero_fils, client_hostname, "Fermeture de la connexion", NULL);
             Close(connfd);
+        }
+        else {
+            // père
         }
     }
     exit(0);
