@@ -11,13 +11,14 @@
 // Structure de la requete
 typedef enum { 
     GET = 0,
-    PUT = 1,
+    FERMETURE = 1,
+    PUT = 2,
     LS = 3
 } typereq_t;
  
 typedef struct {
     typereq_t type;
-    char nomFichier[MAXLINE];
+    char nomFichier[MAX_NAME_LEN];
     int fd_cible;
     int num_paquet;
 } request_t;
