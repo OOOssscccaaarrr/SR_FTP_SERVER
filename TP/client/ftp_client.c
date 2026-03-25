@@ -76,6 +76,7 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
 void cmd_get(rio_t rio, request_t req, int clientfd){
     
     reponse_t rep;
+    req.type = GET;
     char *nomFichierLocal = strrchr(req.nomFichier, '/');
     if (nomFichierLocal != NULL)
         nomFichierLocal++;
@@ -140,16 +141,23 @@ int main(int argc, char **argv)
 
         switch (commande){
             case 0:
-                req.type = GET;
                 strcpy(req.nomFichier, buf);
                 Rio_writen(clientfd, &req, sizeof(request_t)); // Envoie de la première requête au serveur
                 cmd_get(rio, req, clientfd);
                 break;
             case 1:
                 req.type = FERMETURE;
-                printf("Déconnexion du serveur ftp\n");
+                printf("Déconnexion du serveur ftp...\n");
                 connexion_ouverte = 0;
                 Rio_writen(clientfd, &req, sizeof(request_t));
+
+                reponse_t rep;
+                if (Rio_readnb(&rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ACK){
+                    printf("Le serveur a confirmé la fermeture\n");
+                } else {
+                    printf("Le serveur n'a pas confirmé la fermeture\n");
+                }
+
                 break;
             default:
                 printf("ECHEC : Commande invalide. Entrez une commande au format 'GET <nomFichier>' ou 'bye'\n");

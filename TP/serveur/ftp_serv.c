@@ -32,6 +32,17 @@ void reponse_err(int connfd, typerep_t type){
     Rio_writen(connfd, &rep, sizeof(reponse_t));
 }
 
+
+char* type_to_string(typereq_t type) {
+    switch(type){
+        case GET: return "GET";
+        case FERMETURE: return "FERMETURE";
+        case PUT: return "PUT";
+        case LS: return "LS";
+        default: return "INCONNU";
+    }
+}
+
 void afficher_message(int numero_fils, char* client_hostname, char* message, char* argument){
     if (argument){
         printf("[Fils %d] : %s : %s : %s\n", numero_fils, client_hostname, message, argument);
@@ -69,18 +80,19 @@ int main()
     for (int i = 0; i < NPROC  && ((pid[i] = Fork()) != 0); i++){
         printf("[PERE] fils crée : %d\n", i);
     }
-    
+
+    int numero_fils = 0;
+    if (pid_pere != getpid()){
+        while (numero_fils < NPROC && pid[numero_fils] != 0 && pid[numero_fils] != getpid()) {
+        numero_fils++;
+        }
+    }
     while (1) {
-        int numero_fils = -1;
         if (pid_pere != getpid()){
             // Fils
            
-            for (int i = 0; i < NPROC ; i++){
-                if (pid[i] == getpid()){
-                    numero_fils = i;
-                    break;
-                }
-            }
+            
+
             connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
                 
             /* determine the name of the client */
@@ -98,16 +110,21 @@ int main()
             Rio_readinitb(&rio, connfd);
 
             while(1){
-                if (Rio_readnb(&rio, &req, sizeof(request_t)) != sizeof(request_t)) {
+                if ( Rio_readnb(&rio, &req, sizeof(request_t)) < sizeof(request_t)) {
                     reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
                     afficher_message(numero_fils, client_hostname, "Erreur lecture requête", NULL);
                     break;
                 }
 
-                afficher_message(numero_fils, client_hostname, "requête reçue",(char *) req.type);
-                afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
-                if (req.type == FERMETURE){
+                afficher_message(numero_fils, client_hostname, "requête reçue",type_to_string(req.type));
+                if (req.type != FERMETURE) {
+                    afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
+                    }
+                else {
                     afficher_message(numero_fils, client_hostname, "Déconnexion du client", NULL);
+                    rep.reponse = ACK;
+                    rep.nb_paquets = 0;
+                    Rio_writen(connfd, &rep, sizeof(reponse_t));
                     break;
                 }
                 int fd_origine = open(req.nomFichier, O_RDONLY);
