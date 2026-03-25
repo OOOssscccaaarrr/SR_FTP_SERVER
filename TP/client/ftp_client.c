@@ -38,21 +38,72 @@ int lecture_ligne(char *buffer, size_t taille_buffer){
     return 0;
 }
 
-int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd){
-    int fd = Open(nomFichier, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+
+int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
+    if (access(nomFichierLog, F_OK) == 0) {
+        *flog = Open(nomFichierLog, O_RDWR, S_IRUSR | S_IWUSR);
+        if (*flog < 0){
+            printf("ECHEC : Impossible d'ouvrir le fichier log %s\n", nomFichierLog);
+            return -1;
+        }
+        lseek(*flog, sizeof(int), SEEK_SET);
+        char contenu_log[256];
+        if (read(*flog, contenu_log, sizeof(contenu_log)) > 0){
+            int dernier_paquet_recu = atoi(contenu_log);
+            return dernier_paquet_recu + 1;
+        } else {        
+            printf("ECHEC : Impossible de lire le fichier log pour la reprise de paquets\n");
+            return 0; // vide
+        }
+    }
+    else {
+        *flog = Open(nomFichierLog, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        if (*flog < 0){
+            printf("ECHEC : Impossible d'ouvrir le fichier log %s\n", nomFichierLog);
+            return -1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd, int fdlog, int paquet_demande){
+    rio_t rio_file;
+    
+    int nbPaquet = rep.nb_paquets;
+    int compteur_paquet = paquet_demande;
+    int flag, fd;
+
+    if (compteur_paquet >= nbPaquet){
+        printf("Le fichier est déjà complètement reçu\n");
+        return nbPaquet;
+    }
+
+    if (compteur_paquet > 0){
+        flag = O_WRONLY | O_CREAT;
+    }
+    else {
+        flag = O_WRONLY | O_CREAT | O_TRUNC;
+    }
+
+
+    fd = Open(nomFichier, flag, S_IRUSR | S_IWUSR);
     if (fd < 0){
         printf("ECHEC : Impossible de créer le fichier %s\n", nomFichier);
         return -1;
     }
-    rio_t rio;
-    Rio_readinitb(&rio, clientfd);
-    int nbPaquet = rep.nb_paquets;
-    int compteur_paquet = 0;
+
+    Rio_readinitb(&rio_file, clientfd);
+
     for (; compteur_paquet < nbPaquet; compteur_paquet++){
         
-        if (Rio_readnb(&rio, &rep, sizeof(reponse_t)) > 0) {
+        if (Rio_readnb(&rio_file, &rep, sizeof(reponse_t)) > 0) {
             if (rep.reponse == ENVOIE_FICHIER){
                 Rio_writen(fd, rep.paquet.buffer, rep.paquet.taille_buffer);
+                lseek(fdlog, sizeof(int) , SEEK_SET);
+                char contenu_log[256];
+                sprintf(contenu_log, "%d", compteur_paquet);
+                write(fdlog, contenu_log, strlen(contenu_log));   
             }
             else if (rep.reponse == ENVOIE_TERMINER){
                 printf("SUCCESS : Envoi du fichier terminé\n");
@@ -73,21 +124,45 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
 
 
 
-void cmd_get(rio_t rio, request_t req, int clientfd){
+void cmd_get(rio_t *rio, request_t req, int clientfd){
     
     reponse_t rep;
+    int flog, paquet_actuelle = 0;
     req.type = GET;
     char *nomFichierLocal = strrchr(req.nomFichier, '/');
-    if (nomFichierLocal != NULL)
+    if (nomFichierLocal != NULL){ 
         nomFichierLocal++;
-    else
+    }
+    else {
     nomFichierLocal = req.nomFichier;
-    if (Rio_readnb(&rio, &rep, sizeof(reponse_t)) > 0) {
+    }
+
+
+    // LOG
+    char dot_log[] = ".log";
+    char nomFichierLog[MAX_NAME_LEN + 5];
+    strcpy(nomFichierLog, nomFichierLocal);
+    strcat(nomFichierLog, dot_log);
+
+    paquet_actuelle = checklog(&flog, nomFichierLog);
+    if (paquet_actuelle < 0){
+        return;
+    }
+    req.num_paquet = paquet_actuelle;
+    
+    // REQUETE
+    Rio_writen(clientfd, &req, sizeof(request_t));
+    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0) {
         if (rep.reponse == ACK){
-            if (reception_fichier(nomFichierLocal, rep, clientfd) < rep.nb_paquets){ // Boucle ici pour recevoir les paquets
-                printf("ECHEC : Une erreur s'est produite lors de la réception du fichier\n");
+
+             printf("Attente du premier paquet : %d / %d\n", paquet_actuelle, rep.nb_paquets);
+            if (reception_fichier(nomFichierLocal, rep, clientfd, flog, paquet_actuelle) < rep.nb_paquets){ // Boucle ici pour recevoir les paquets
+                printf("ECHEC : Une erreur s'est produite lors de la réception du fichier\n");   
+              Close(flog);   
             } else {
                 printf("SUCCESS : Fichier %s reçu avec succès\n",nomFichierLocal);
+                Close(flog);   
+                remove(nomFichierLog);
             }
         } else if (rep.reponse == ENVOIE_FICHIER ||rep.reponse == ENVOIE_TERMINER){
             printf("ECHEC : pas de ACK\n");
@@ -97,7 +172,7 @@ void cmd_get(rio_t rio, request_t req, int clientfd){
         }
     } else { /* the server has prematurely closed the connection */
         printf("ECHEC : Le serveur a fermé la connexion de manière prématurée\n");
-    }
+    } 
 }
 
 
@@ -142,8 +217,7 @@ int main(int argc, char **argv)
         switch (commande){
             case 0:
                 strcpy(req.nomFichier, buf);
-                Rio_writen(clientfd, &req, sizeof(request_t)); // Envoie de la première requête au serveur
-                cmd_get(rio, req, clientfd);
+                cmd_get(&rio, req, clientfd);
                 break;
             case 1:
                 req.type = FERMETURE;

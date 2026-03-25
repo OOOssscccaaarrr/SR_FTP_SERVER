@@ -158,7 +158,7 @@ int main()
                 
                 off_t taille = st.st_size;
                 rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
-                int compteur_paquet = 0;
+                int compteur_paquet = req.num_paquet;
                 Rio_writen(connfd, &rep, sizeof(reponse_t));
 
 
@@ -169,6 +169,7 @@ int main()
                 Rio_readinitb(&rio_origine, fd_origine);
                 afficher_message(numero_fils, client_hostname, "Envoi des paquets", NULL);
                 while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
+                    sleep(1); // aide pour check les crashs
                     if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer*
                         afficher_message(numero_fils, client_hostname, " [ERREUR] Nombre de paquets dépassé", NULL);
                         reponse_err(connfd, ERREUR_SERVEUR);
