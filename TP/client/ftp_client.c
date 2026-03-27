@@ -3,6 +3,9 @@
  */
 #include "ftp_client.h"
 
+int clientfd_global;
+
+
 void gestion_err_serveur(typerep_t reponse){
     if (reponse == ERREUR_REQUETE_INVALIDE){
         printf("ECHEC : La requête est invalide\n");
@@ -46,7 +49,7 @@ int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
             printf("ECHEC : Impossible d'ouvrir le fichier log %s\n", nomFichierLog);
             return -1;
         }
-        lseek(*flog, sizeof(int), SEEK_SET);
+        lseek(*flog, 0, SEEK_SET);
         char contenu_log[256];
         if (read(*flog, contenu_log, sizeof(contenu_log)) > 0){
             int dernier_paquet_recu = atoi(contenu_log);
@@ -94,15 +97,19 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
     }
 
     Rio_readinitb(&rio_file, clientfd);
+    if (compteur_paquet > 0)
+        lseek(fd, (off_t)paquet_demande * MAX_PAQ_LEN, SEEK_SET);
+
 
     for (; compteur_paquet < nbPaquet; compteur_paquet++){
         
         if (Rio_readnb(&rio_file, &rep, sizeof(reponse_t)) > 0) {
             if (rep.reponse == ENVOIE_FICHIER){
                 Rio_writen(fd, rep.paquet.buffer, rep.paquet.taille_buffer);
-                lseek(fdlog, sizeof(int) , SEEK_SET);
+                
                 char contenu_log[256];
-                sprintf(contenu_log, "%d", compteur_paquet);
+                sprintf(contenu_log, "%d", rep.paquet.numero_paquet);
+                lseek(fdlog, 0 , SEEK_SET);
                 write(fdlog, contenu_log, strlen(contenu_log));   
             }
             else if (rep.reponse == ENVOIE_TERMINER){
@@ -182,6 +189,7 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
 int main(int argc, char **argv)
 {
     int clientfd, connexion_ouverte = 1;
+    
     char *host, buf[MAXLINE];
     rio_t rio;
     request_t req;
@@ -197,6 +205,8 @@ int main(int argc, char **argv)
      * to obtain the IP address.
      */
     clientfd = Open_clientfd(host, PORT);
+
+    clientfd_global = clientfd;
     
     /*
      * At this stage, the connection is established between the client

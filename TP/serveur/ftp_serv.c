@@ -7,6 +7,8 @@
 pid_t pid[NPROC];
 int pid_pere;
 
+
+
 void sigchld_hdlr(int signum){
     waitpid(-1, NULL, WNOHANG);
 }
@@ -14,7 +16,7 @@ void sigchld_hdlr(int signum){
 void sigint_hdlr(int signum){
     if (getpid() == pid_pere){
         for (int i = 0; i < NPROC ; i++){
-            if (pid[i] == 0){
+            if (pid[i] != 0){
                 kill(pid[i], SIGINT);
                 printf("fils tué : %d\n", i);
             }
@@ -30,17 +32,6 @@ void reponse_err(int connfd, typerep_t type){
     rep.nb_paquets = 0;
     rep.paquet = (paquet_t) {0};
     Rio_writen(connfd, &rep, sizeof(reponse_t));
-}
-
-
-char* type_to_string(typereq_t type) {
-    switch(type){
-        case GET: return "GET";
-        case FERMETURE: return "FERMETURE";
-        case PUT: return "PUT";
-        case LS: return "LS";
-        default: return "INCONNU";
-    }
 }
 
 void afficher_message(int numero_fils, char* client_hostname, char* message, char* argument){
@@ -80,19 +71,18 @@ int main()
     for (int i = 0; i < NPROC  && ((pid[i] = Fork()) != 0); i++){
         printf("[PERE] fils crée : %d\n", i);
     }
-
-    int numero_fils = 0;
-    if (pid_pere != getpid()){
-        while (numero_fils < NPROC && pid[numero_fils] != 0 && pid[numero_fils] != getpid()) {
-        numero_fils++;
-        }
-    }
+    
     while (1) {
+        int numero_fils = -1;
         if (pid_pere != getpid()){
             // Fils
            
-            
-
+            for (int i = 0; i < NPROC ; i++){
+                if (pid[i] == 0){
+                    numero_fils = i;
+                    break;
+                }
+            }
             connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
                 
             /* determine the name of the client */
@@ -110,22 +100,26 @@ int main()
             Rio_readinitb(&rio, connfd);
 
             while(1){
-                if ( Rio_readnb(&rio, &req, sizeof(request_t)) < sizeof(request_t)) {
+                ssize_t n_lu;
+                if ( ( n_lu = Rio_readnb(&rio, &req, sizeof(request_t))) != sizeof(request_t)) {
                     reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
                     afficher_message(numero_fils, client_hostname, "Erreur lecture requête", NULL);
                     break;
                 }
+                if (n_lu == 0){
+                    afficher_message(numero_fils, client_hostname, "Le client a fermé la connexion", NULL);
+                    break;
+                }
 
-                afficher_message(numero_fils, client_hostname, "requête reçue",type_to_string(req.type));
-                if (req.type != FERMETURE) {
-                    afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
-                    }
-                else {
+                afficher_message(numero_fils, client_hostname, "requête reçue",(char *) req.type);
+                afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
+                if (req.type == FERMETURE){
+                    // Le client souhaite fermer la connexion
                     afficher_message(numero_fils, client_hostname, "Déconnexion du client", NULL);
                     rep.reponse = ACK;
                     rep.nb_paquets = 0;
                     Rio_writen(connfd, &rep, sizeof(reponse_t));
-                    break;
+                    break;  
                 }
                 int fd_origine = open(req.nomFichier, O_RDONLY);
                 if (fd_origine < 0) {
@@ -158,22 +152,25 @@ int main()
                 
                 off_t taille = st.st_size;
                 rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
-                int compteur_paquet = req.num_paquet;
+                
                 Rio_writen(connfd, &rep, sizeof(reponse_t));
 
 
                 size_t n;
                 char buf[MAX_PAQ_LEN];
                 rio_t rio_origine;
-                
+                if (req.num_paquet > 0)
+                    lseek(fd_origine, (off_t)req.num_paquet * MAX_PAQ_LEN, SEEK_SET);
+                int compteur_paquet = req.num_paquet;
                 Rio_readinitb(&rio_origine, fd_origine);
-                afficher_message(numero_fils, client_hostname, "Envoi des paquets", NULL);
+                afficher_message(numero_fils, client_hostname, "Envoi des paquets a partir du numéro ",NULL);
+
                 while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
-                    sleep(1); // aide pour check les crashs
-                    if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer*
+                    //sleep(1); // Simuler un délai de transmission
+                    if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer
                         afficher_message(numero_fils, client_hostname, " [ERREUR] Nombre de paquets dépassé", NULL);
                         reponse_err(connfd, ERREUR_SERVEUR);
-                        Close(connfd);
+                        Close(connfd)   ;
                         break;
                     }
                     paquet_t paquet;
