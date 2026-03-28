@@ -4,7 +4,7 @@
 
 #include "csapp.h"
 
-#define PORT 2121
+#define PORT_DEFAUT 2121
 #define MAX_NAME_LEN 256
 #define MAX_PAQ_LEN 1024
 

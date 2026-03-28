@@ -42,6 +42,21 @@ void afficher_message(int numero_fils, char* client_hostname, char* message, cha
     printf("[Fils %d] : %s : %s\n", numero_fils, client_hostname, message);
 }
 
+char* type_en_char(typereq_t type){
+    switch (type){
+        case GET:
+            return "GET";
+        case FERMETURE:
+            return "FERMETURE";
+        case PUT:
+            return "PUT";
+        case LS:
+            return "LS";
+        default:
+            return "INCONNU";
+    }
+}
+
 
 /* 
  * Note that this code only works with IPv4 addresses
@@ -67,7 +82,7 @@ int main()
     
     clientlen = (socklen_t)sizeof(clientaddr);
 
-    listenfd = Open_listenfd(PORT);
+    listenfd = Open_listenfd(PORT_DEFAUT);
     for (int i = 0; i < NPROC  && ((pid[i] = Fork()) != 0); i++){
         printf("[PERE] fils crée : %d\n", i);
     }
@@ -111,9 +126,10 @@ int main()
                     break;
                 }
 
-                afficher_message(numero_fils, client_hostname, "requête reçue",(char *) req.type);
+                afficher_message(numero_fils, client_hostname, "requête reçue", type_en_char(req.type));
                 afficher_message(numero_fils, client_hostname, "nom du fichier demandé", req.nomFichier);
                 if (req.type == FERMETURE){
+                    memset(&req, 0, sizeof(request_t));
                     // Le client souhaite fermer la connexion
                     afficher_message(numero_fils, client_hostname, "Déconnexion du client", NULL);
                     rep.reponse = ACK;
