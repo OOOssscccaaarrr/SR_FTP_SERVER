@@ -80,7 +80,6 @@ int main(int argc, char **argv)
                 cmd_get(&rio, req, clientfd);
                 break;
             case 1:
-                printf("Déconnexion du serveur ftp...\n");
                 cmd_ferme(&rio, req, clientfd);
                 connexion_ouverte = 0;
 
@@ -89,6 +88,8 @@ int main(int argc, char **argv)
                 printf("ECHEC : Commande invalide. Entrez une commande au format 'GET <nomFichier>' ou 'bye'\n");
                 continue;
         }
+        // Réinitialisation de req et rep pour la prochaine requete
+        memset(&req, 0, sizeof req);
     }      
     Close(clientfd);
     exit(0);

@@ -9,22 +9,6 @@ void sigint_hdlr(int signum){
 }
 
 
-void reponse_err(int connfd, typerep_t type){
-    reponse_t rep;
-    rep.reponse = type;
-    rep.nb_paquets = 0;
-    rep.paquet = (paquet_t) {0};
-    Rio_writen(connfd, &rep, sizeof(reponse_t));
-}
-
-void afficher_message(int numero_serveur, char* client_hostname, char* message, char* argument){
-    if (argument){
-        printf("[Serveur %d] : %s : %s : %s\n", numero_serveur, client_hostname, message, argument);
-        return;
-    }
-    printf("[Serveur %d] : %s : %s\n", numero_serveur, client_hostname, message);
-}
-
 char* type_en_char(typereq_t type){
     switch (type){
         case GET:
@@ -88,15 +72,17 @@ int main(int argc, char **argv)
                 break;
             } else if (n_lu != sizeof(request_t)) {
                 reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
+                afficher_message(numero_esclave, client_hostname, "Requête de taille invalide", NULL);
                 break;
             }
 
             afficher_message(numero_esclave, client_hostname, "requête reçue", type_en_char(req.type));
-            afficher_message(numero_esclave, client_hostname, "nom du fichier demandé", req.nomFichier);
+            
             switch (req.type)
             {
             case GET:
-                traitement_get(&rio, connfd, numero_esclave, client_hostname, req.nomFichier);
+                afficher_message(numero_esclave, client_hostname, "nom du fichier demandé", req.nomFichier);
+                traitement_get(&rio, connfd, req, numero_esclave, client_hostname);
                 break;
             case FERMETURE:
                 memset(&req, 0, sizeof(request_t));
@@ -114,7 +100,9 @@ int main(int argc, char **argv)
                 reponse_err(connfd, ERREUR_REQUETE_INVALIDE);
                 break;
             }
-           
+            // Réinitialisation de req et rep pour la prochaine requete
+            memset(&req, 0, sizeof req);
+            memset(&rep, 0, sizeof rep);
         }
         afficher_message(numero_esclave, client_hostname, "Fermeture de la connexion", NULL);
         Close(connfd);
