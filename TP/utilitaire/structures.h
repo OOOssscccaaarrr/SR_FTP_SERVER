@@ -3,16 +3,19 @@
 #define STRUCTURES_H
 
 #include "csapp.h"
+#include <time.h>
+#include <stdio.h>
 
 #define PORT_DEFAUT 2121
 #define MAX_NAME_LEN 256
 #define MAX_PAQ_LEN 1024
+#define MAX_PATH_LEN 512
 
 // Structure de la requete
 typedef enum { 
     GET = 0,
     FERMETURE = 1,
-    PUT = 2,
+    REQUETE_REDIRECTION = 2,
     LS = 3
 } typereq_t;
  
@@ -28,6 +31,7 @@ typedef enum{
     ACK = 0,
     ENVOIE_FICHIER = 1,
     ENVOIE_TERMINER = 2,
+    REDIRECTION = 3,
     ERREUR_SERVEUR = 10,
     ERREUR_REQUETE_INVALIDE = 11,
     ERREUR_FICHIER_INACCESSIBLE = 51,
@@ -40,10 +44,17 @@ typedef struct {
     int numero_paquet;
 } paquet_t;
 
+typedef struct {
+    char ip[INET_ADDRSTRLEN];
+    int port;
+} serveur_esclave_t;
+
+
 typedef struct{
     typerep_t reponse;
     int nb_paquets;
     paquet_t paquet;
+    serveur_esclave_t serveur_esclave;
 } reponse_t;
 
 

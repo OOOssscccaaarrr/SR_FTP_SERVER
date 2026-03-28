@@ -1,0 +1,67 @@
+#include "../utilitaire/structures.h"
+
+
+void traitement_get(rio_t *rio, int connfd, char *filename, int numero_serv, char client_hostname[MAXLINE]) {
+     int fd_origine = open(filename, O_RDONLY);
+            if (fd_origine < 0) {
+                if (errno == ENOENT) {
+                    reponse_err(connfd, ERREUR_FICHIER_INEXISTANT);
+                    afficher_message(numero_esclave, client_hostname, "Le fichier demandé n'existe pas", NULL);
+                    continue;
+                } else if (errno == EACCES) {
+                    reponse_err(connfd, ERREUR_FICHIER_INACCESSIBLE);
+                    afficher_message(numero_esclave, client_hostname, "Le fichier demandé n'est pas accessible", NULL);   
+                    continue; 
+                } else {
+                    reponse_err(connfd, ERREUR_SERVEUR);
+                    afficher_message(numero_esclave, client_hostname, "Erreur serveur lors de l'ouverture du fichier", NULL);
+                    continue;
+                }
+                continue;
+            }
+
+            struct stat st;
+            if (fstat(fd_origine, &st) < 0) {
+                perror("fstat");
+                reponse_err(connfd, ERREUR_SERVEUR);
+                Close(connfd);
+                close(fd_origine);
+                continue;
+            }
+            afficher_message(numero_esclave, client_hostname, "Le fichier demandé existe et est accessible", NULL);
+            rep.reponse = ACK;
+            
+            off_t taille = st.st_size;
+            rep.nb_paquets = taille / MAX_PAQ_LEN + (taille % MAX_PAQ_LEN != 0); 
+            
+            Rio_writen(connfd, &rep, sizeof(reponse_t));
+
+            size_t n;
+            char buf[MAX_PAQ_LEN];
+            rio_t rio_origine;
+            if (req.num_paquet > 0)
+                lseek(fd_origine, (off_t)req.num_paquet * MAX_PAQ_LEN, SEEK_SET);
+            int compteur_paquet = req.num_paquet;
+            Rio_readinitb(&rio_origine, fd_origine);
+            afficher_message(numero_esclave, client_hostname, "Envoi des paquets a partir du numéro ",NULL);
+
+            while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
+                //sleep(1); // Simuler un délai de transmission
+                if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer
+                    afficher_message(numero_esclave, client_hostname, " [ERREUR] Nombre de paquets dépassé", NULL);
+                    reponse_err(connfd, ERREUR_SERVEUR);
+                    Close(connfd)   ;
+                    break;
+                }
+                paquet_t paquet;
+                paquet.taille_buffer = n;
+                paquet.numero_paquet = compteur_paquet++;
+                memcpy(paquet.buffer, buf, n);
+                rep.paquet = paquet;
+                rep.reponse = ENVOIE_FICHIER;
+                Rio_writen(connfd, &rep, sizeof(reponse_t));              
+            }
+
+            afficher_message(numero_esclave, client_hostname, "Fichier envoyé", NULL);
+            Close(fd_origine);
+}

@@ -6,6 +6,6 @@
 #define NPROC 3
 
 
-int get(char *nomFichier, int fd_cible);
+traitement_get(connfd, &req, numero_esclave, client_hostname);
 
 #endif

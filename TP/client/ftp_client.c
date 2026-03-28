@@ -1,12 +1,4 @@
-/*
- * echoclient.c - An echo client
- */
 #include "ftp_client.h"
-
-int clientfd_global;
-
-
-
 
 int lecture_ligne(char *buffer, size_t taille_buffer){
     char ligne[256];
@@ -40,11 +32,13 @@ int main(int argc, char **argv)
     char *host, buf[MAXLINE];
     rio_t rio;
     request_t req;
+    serveur_esclave_t se;
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s <host> \n", argv[0]);
         exit(0);
     }
+
     host = argv[1];
     /*
      * Note that the 'host' can be a name or an IP address.
@@ -53,8 +47,6 @@ int main(int argc, char **argv)
      */
     clientfd = Open_clientfd(host, PORT_DEFAUT);
 
-    clientfd_global = clientfd;
-    
     /*
      * At this stage, the connection is established between the client
      * and the server OS ... but it is possible that the server application
@@ -63,8 +55,19 @@ int main(int argc, char **argv)
     printf("Connecté au serveur ftp\n"); 
     
     Rio_readinitb(&rio, clientfd);
-    // Première requête
-    req.num_paquet = 0;
+    
+    se = cmd_connexion(&rio, clientfd);
+    Close(clientfd);
+    if (se.port == 0){
+        exit(1);
+    }
+    else {
+        printf("Redirection vers le serveur esclave : %s", se.ip);
+        printf(":%d\n", se.port);
+        clientfd = Open_clientfd(se.ip, se.port);
+        printf("Connecté au serveur esclave ftp\n");
+        Rio_readinitb(&rio, clientfd);
+    }
 
 
     while(connexion_ouverte){
@@ -77,10 +80,9 @@ int main(int argc, char **argv)
                 cmd_get(&rio, req, clientfd);
                 break;
             case 1:
-                req.type = FERMETURE;
                 printf("Déconnexion du serveur ftp...\n");
-                connexion_ouverte = 0;
                 cmd_ferme(&rio, req, clientfd);
+                connexion_ouverte = 0;
 
                 break;
             default:

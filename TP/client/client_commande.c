@@ -99,6 +99,9 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
 
 
 void cmd_get(rio_t *rio, request_t req, int clientfd){
+
+    time_t deb_time;
+    time(&deb_time);
     
     reponse_t rep;
     int flog, paquet_actuelle = 0;
@@ -111,6 +114,10 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
     nomFichierLocal = req.nomFichier;
     }
 
+    mkdir("receipt", 0755);
+    char chemin_receipt[MAX_PATH_LEN];
+    snprintf(chemin_receipt, sizeof(chemin_receipt), "receipt/%s", nomFichierLocal);
+    char *nomFichierFinal = chemin_receipt;
 
     // LOG
     char dot_log[] = ".log";
@@ -129,13 +136,19 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
     if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0) {
         if (rep.reponse == ACK){
             printf("Attente du paquet numéro : %d / %d\n", paquet_actuelle, rep.nb_paquets);
-            if (reception_fichier(nomFichierLocal, rep, clientfd, flog, paquet_actuelle, rio) < rep.nb_paquets){ // Boucle ici pour recevoir les paquets
+            if (reception_fichier(nomFichierFinal, rep, clientfd, flog, paquet_actuelle, rio) < rep.nb_paquets){ // Boucle ici pour recevoir les paquets
                 printf("ECHEC : Une erreur s'est produite lors de la réception du fichier\n");   
               Close(flog);   
             } else {
-                printf("SUCCESS : Fichier %s reçu avec succès\n",nomFichierLocal);
+                printf("SUCCESS : Fichier %s reçu avec succès\n",nomFichierFinal);
                 Close(flog);   
                 remove(nomFichierLog);
+                time_t fin_time;
+                time(&fin_time);
+                double y_t = difftime(fin_time, deb_time);
+                int x_b = rep.nb_paquets * MAX_PAQ_LEN;
+                double z_b = (x_b / 1024.0) / (y_t > 0 ? y_t :1);
+                printf("Reçu %d bytes en %f secondes (%f Kbytes/s). \n", x_b, y_t, z_b);
             }
         } else if (rep.reponse == ENVOIE_FICHIER ||rep.reponse == ENVOIE_TERMINER){
             printf("ECHEC : pas de ACK\n");
@@ -152,6 +165,7 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
 
 
 void cmd_ferme(rio_t *rio, request_t req, int clientfd){
+    memset(&req, 0, sizeof(request_t));
     req.type = FERMETURE;
     printf("Déconnexion du serveur ftp...\n");
     Rio_writen(clientfd, &req, sizeof(request_t));
@@ -163,4 +177,22 @@ void cmd_ferme(rio_t *rio, request_t req, int clientfd){
         printf("Le serveur n'a pas confirmé la fermeture\n");
     }
 
+}
+
+
+serveur_esclave_t cmd_connexion(rio_t *rio, int clientfd){
+    request_t req;
+    memset(&req, 0, sizeof(request_t));
+    req.type = REQUETE_REDIRECTION;
+    printf("Connexion au serveur maitre...\n");
+    Rio_writen(clientfd, &req, sizeof(request_t));
+
+    reponse_t rep;
+    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == REDIRECTION){
+        printf("Le serveur maitre a envoyé la redirection\n");
+        return rep.serveur_esclave;
+    } else {
+        printf("Le serveur n'a pas confirmé la connexion\n");
+        return (serveur_esclave_t){.ip = "", .port = 0};
+    }
 }

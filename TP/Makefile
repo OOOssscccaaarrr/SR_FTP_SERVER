@@ -17,10 +17,10 @@ LDFLAGS =
 LIBS += -lpthread
 
 INCLUDE = csapp.h structures.h
-OBJS = utilitaire/csapp.o serveur/get.o client/client_commande.o
+OBJS = utilitaire/csapp.o client/client_commande.o serveur/traitement.o
 INCLDIR = -I. -Iutilitaire -Iserveur -Iclient
 
-PROGS =  serveur/ftp_serv client/ftp_client
+PROGS =  serveur/ftp_serv client/ftp_client serveur/ftp_maitre
 
 
 
@@ -43,6 +43,9 @@ serveur/ftp_serv: serveur/ftp_serv.o $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $^ $(LIBS)
 
 client/ftp_client: client/ftp_client.o $(OBJS)
+	$(CC) -o $@ $(LDFLAGS) $^ $(LIBS)
+
+serveur/ftp_maitre: serveur/ftp_maitre.o $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $^ $(LIBS)
 	
 clean:

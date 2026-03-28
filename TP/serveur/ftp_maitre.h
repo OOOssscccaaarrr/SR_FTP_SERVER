@@ -6,9 +6,4 @@
 #define NB_SLAVE 2
 
 
-typedef struct {
-    char* ip;
-    int port;
-} serveur_escalve_t;
-
 #endif

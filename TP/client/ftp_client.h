@@ -5,6 +5,7 @@
 
 void cmd_get(rio_t *rio, request_t req, int clientfd);
 void cmd_ferme(rio_t *rio, request_t req, int clientfd);
+serveur_esclave_t cmd_connexion(rio_t *rio, int clientfd);
 
 
 #endif
