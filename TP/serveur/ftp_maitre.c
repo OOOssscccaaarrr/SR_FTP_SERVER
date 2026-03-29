@@ -1,5 +1,10 @@
 #include <ftp_maitre.h>
 
+/**
+ * Envoie une réponse d'erreur ERREUR_REQUETE_INVALIDE au client.
+ * @param rio    : buffer de lecture rio (non utilisé ici)
+ * @param connfd : file descriptor de la connexion client
+ */
 void requete_invalide(rio_t *rio, int connfd){
     reponse_t rep;
     rep.reponse = ERREUR_REQUETE_INVALIDE;
@@ -9,7 +14,6 @@ void requete_invalide(rio_t *rio, int connfd){
     printf("[MAITRE] type de requete invalide\n");
     Rio_writen(connfd, &rep, sizeof(reponse_t));
 }
-
 
 int main(){
     int listenfd, connfd, round_robin = 0;

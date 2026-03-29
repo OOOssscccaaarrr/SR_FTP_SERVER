@@ -1,5 +1,14 @@
 #include "../utilitaire/structures.h"
 
+/**
+ * Affiche un message formaté avec le numéro du serveur et le nom du client.
+ * Format : "[Serveur <numero>] : <client> : <message> : <argument>" si argument non NULL
+ *          "[Serveur <numero>] : <client> : <message>" sinon
+ * @param numero_serveur  : numéro d'identification du serveur esclave
+ * @param client_hostname : nom d'hôte du client
+ * @param message         : message à afficher
+ * @param argument        : argument optionnel (NULL si absent)
+ */
 void afficher_message(int numero_serveur, char* client_hostname, char* message, char* argument){
     if (argument){
         printf("[Serveur %d] : %s : %s : %s\n", numero_serveur, client_hostname, message, argument);
@@ -8,6 +17,11 @@ void afficher_message(int numero_serveur, char* client_hostname, char* message, 
     printf("[Serveur %d] : %s : %s\n", numero_serveur, client_hostname, message);
 }
 
+/**
+ * Envoie une réponse d'erreur au client.
+ * @param connfd : file descriptor de la connexion client
+ * @param type   : type d'erreur à envoyer
+ */
 void reponse_err(int connfd, typerep_t type){
     reponse_t rep;
     rep.reponse = type;
@@ -16,6 +30,17 @@ void reponse_err(int connfd, typerep_t type){
     Rio_writen(connfd, &rep, sizeof(reponse_t));
 }
 
+/**
+ * Traite une requête GET : ouvre le fichier demandé, envoie un ACK avec le nombre
+ * de paquets, puis transmet le fichier paquet par paquet via ENVOIE_FICHIER.
+ * Supporte la reprise à partir d'un numéro de paquet donné via req.num_paquet
+ * en se positionnant au bon offset avec lseek.
+ * @param rio             : buffer de lecture rio (non utilisé ici)
+ * @param connfd          : file descriptor de la connexion client
+ * @param req             : requête reçue (contient nomFichier et num_paquet)
+ * @param numero_serv     : numéro d'identification du serveur esclave
+ * @param client_hostname : nom d'hôte du client
+ */
 void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char client_hostname[MAX_NAME_LEN]) {
     reponse_t rep;
     int fd_origine = open(req.nomFichier, O_RDONLY);
@@ -30,7 +55,6 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
             reponse_err(connfd, ERREUR_SERVEUR);
             afficher_message(numero_serv, client_hostname, "Erreur serveur lors de l'ouverture du fichier", NULL);
         }
-        Close(connfd);
         return;
     }
 
@@ -38,11 +62,9 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
         if (fstat(fd_origine, &st) < 0) {
             perror("fstat");
             reponse_err(connfd, ERREUR_SERVEUR);
-            Close(connfd);
             close(fd_origine);
             return;
         }
-        afficher_message(numero_serv, client_hostname, "Le fichier demandé existe et est accessible", NULL);
         rep.reponse = ACK;
         
         off_t taille = st.st_size;
@@ -60,11 +82,10 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
         afficher_message(numero_serv, client_hostname, "Envoi des paquets a partir du numéro ",NULL);
 
         while ((n = Rio_readnb(&rio_origine, buf, MAX_PAQ_LEN)) > 0) {
-            //sleep(1); // Simuler un délai de transmission
-            if (compteur_paquet >= rep.nb_paquets){ // Erreur a gérer
+            if (compteur_paquet >= rep.nb_paquets){ 
                 afficher_message(numero_serv, client_hostname, " [ERREUR] Nombre de paquets dépassé", NULL);
                 reponse_err(connfd, ERREUR_SERVEUR);
-                Close(connfd)   ;
+                Close(connfd)  ;
                 break;
             }
             paquet_t paquet;
@@ -80,6 +101,17 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
         Close(fd_origine);
 }
 
+
+/**
+ * Traite une requête LS : exécute la commande ls avec les arguments fournis
+ * dans req.nomFichier via popen, lit la sortie et la transmet au client
+ * paquet par paquet via le même protocole que GET.
+ * @param rio             : buffer de lecture rio (non utilisé ici)
+ * @param connfd          : file descriptor de la connexion client
+ * @param req             : requête reçue (contient les arguments ls dans nomFichier)
+ * @param numero_serv     : numéro d'identification du serveur esclave
+ * @param client_hostname : nom d'hôte du client
+ */
 void traitement_ls(rio_t *rio, int connfd, request_t req, int numero_serv, char client_hostname[MAX_NAME_LEN]) {
     char cmd[MAX_NAME_LEN + 4];
     if (strlen(req.nomFichier) > 0)

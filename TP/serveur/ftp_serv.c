@@ -1,14 +1,20 @@
-/*
- * echoserveri.c - An iterative echo server
- */
 
 #include "ftp_serv.h"
 
+/**
+ * Gestionnaire du signal SIGINT (Ctrl+C).
+ * Termine proprement le processus serveur.
+ * @param signum : numéro du signal reçu
+ */
 void sigint_hdlr(int signum){
     exit(0);
 }
 
-
+/**
+ * Convertit un type de requête en chaîne de caractères pour l'affichage.
+ * @param type : type de requête
+ * @return "GET", "FERMETURE", "LS" ou "INCONNU"
+ */
 char* type_en_char(typereq_t type){
     switch (type){
         case GET:
@@ -22,11 +28,6 @@ char* type_en_char(typereq_t type){
     }
 }
 
-
-/* 
- * Note that this code only works with IPv4 addresses
- * (IPv6 is not supported)
- */
 int main(int argc, char **argv)
 {
     Signal(SIGINT, sigint_hdlr);

@@ -1,5 +1,12 @@
 #include "ftp_client.h"
 
+/**
+ * Lit une ligne depuis stdin et extrait la commande et ses arguments.
+ * Commandes supportées : GET <nomFichier>, bye, ls
+ * @param buffer       : buffer de sortie pour les arguments de la commande
+ * @param taille_buffer : taille du buffer
+ * @return 0 (GET), 1 (bye), 3 (ls), -1 (commande invalide ou erreur)
+ */
 int lecture_ligne(char *buffer, size_t taille_buffer){
     int val_retour = -1;
     char ligne[256];
@@ -29,12 +36,8 @@ int lecture_ligne(char *buffer, size_t taille_buffer){
 
     strncpy(buffer, nomFichier, taille_buffer - 1);
     buffer[taille_buffer - 1] = '\0';
-    printf("Commande : %s, Fichier : %s\n", commande, buffer);
     return val_retour;
 }
-
-
-
 
 
 int main(int argc, char **argv)
@@ -58,13 +61,6 @@ int main(int argc, char **argv)
      * to obtain the IP address.
      */
     clientfd = Open_clientfd(host, PORT_DEFAUT);
-
-    /*
-     * At this stage, the connection is established between the client
-     * and the server OS ... but it is possible that the server application
-     * has not yet called "Accept" for this connection
-     */
-    printf("Connecté au serveur ftp\n"); 
     
     Rio_readinitb(&rio, clientfd);
     
@@ -74,11 +70,11 @@ int main(int argc, char **argv)
         exit(1);
     }
     else {
-        printf("Redirection vers le serveur esclave : %s", se.ip);
-        printf(":%d\n", se.port);
+        
         clientfd = Open_clientfd(se.ip, se.port);
-        printf("Connecté au serveur esclave ftp\n");
         Rio_readinitb(&rio, clientfd);
+        printf("Connecté au serveur : %s", se.ip);
+        printf(":%d\n", se.port);
     }
 
 

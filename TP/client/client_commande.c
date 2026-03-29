@@ -1,5 +1,9 @@
 #include "../utilitaire/structures.h"
 
+/**
+ * Affiche un message d'erreur correspondant au code d'erreur reçu du serveur.
+ * @param reponse : le code d'erreur reçu du serveur
+ */
 void gestion_err_serveur(typerep_t reponse){
     if (reponse == ERREUR_REQUETE_INVALIDE){
         printf("ECHEC : La requête est invalide\n");
@@ -14,6 +18,14 @@ void gestion_err_serveur(typerep_t reponse){
     }
 }
 
+/**
+ * Vérifie l'existence d'un fichier log pour une reprise de transfert.
+ * Si le log existe : ouvre en lecture/écriture et retourne le numéro du prochain paquet attendu.
+ * Si le log n'existe pas : crée le fichier log et retourne 0.
+ * @param flog : pointeur vers le file descriptor du log
+ * @param nomFichierLog : nom du fichier log
+ * @return le numéro du prochain paquet attendu, -1 en cas d'erreur
+ */
 int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
     if (access(nomFichierLog, F_OK) == 0) {
         *flog = Open(nomFichierLog, O_RDWR, S_IRUSR | S_IWUSR);
@@ -45,6 +57,19 @@ int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
     return 0;
 }
 
+/**
+ * Reçoit les paquets du serveur et les écrit dans un fichier local.
+ * Ouvre le fichier en écriture (sans troncature si reprise).
+ * Se positionne au bon offset avec lseek si reprise.
+ * Met à jour le log après chaque paquet reçu.
+ * @param nomFichier : nom du fichier local de destination
+ * @param rep : dernière réponse reçue du serveur (contient nb_paquets)
+ * @param clientfd : file descriptor de la connexion
+ * @param fdlog : file descriptor du fichier log
+ * @param paquet_demande : numéro du premier paquet attendu
+ * @param rio : buffer de lecture rio
+ * @return le nombre de paquets reçus, -1 en cas d'erreur
+ */
 int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd, int fdlog, int paquet_demande, rio_t *rio){
     int nbPaquet = rep.nb_paquets;
     int compteur_paquet = paquet_demande;
@@ -96,7 +121,16 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
 }
 
 
-
+/**
+ * Gère la commande GET complète côté client.
+ * Vérifie le log pour une éventuelle reprise.
+ * Envoie la requête GET avec le numéro du premier paquet attendu.
+ * Reçoit l'ACK puis appelle reception_fichier.
+ * Supprime le log en cas de succès et affiche les statistiques (taille, durée, débit).
+ * @param rio : buffer de lecture rio
+ * @param req : requête à envoyer (contient le nom du fichier)
+ * @param clientfd : file descriptor de la connexion
+ */
 void cmd_get(rio_t *rio, request_t req, int clientfd){
 
     time_t deb_time;
@@ -139,7 +173,7 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
                 printf("ECHEC : Une erreur s'est produite lors de la réception du fichier\n");   
               Close(flog);   
             } else {
-                printf("SUCCESS : Fichier %s reçu avec succès\n",nomFichierFinal);
+                printf("Fichier %s reçu avec succès\n",nomFichierFinal);
                 Close(flog);   
                 remove(nomFichierLog);
                 time_t fin_time;
@@ -162,41 +196,57 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
     } 
 }
 
-
+/**
+ * Envoie une requête de fermeture au serveur et attend sa confirmation (ACK).
+ * @param rio : buffer de lecture rio
+ * @param req : requête à envoyer
+ * @param clientfd : file descriptor de la connexion
+ */
 void cmd_ferme(rio_t *rio, request_t req, int clientfd){
     memset(&req, 0, sizeof(request_t));
     req.type = FERMETURE;
-    printf("SUCCESS : Déconnexion du serveur ftp...\n");
+    printf("Déconnexion du serveur ftp\n");
     Rio_writen(clientfd, &req, sizeof(request_t));
 
     reponse_t rep;
     if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ACK){
-        printf("SUCCESS : Le serveur a confirmé la fermeture\n");
+        printf("Le serveur a confirmé la deconnexion\n");
     } else {
-        printf("ECHEC : Le serveur n'a pas confirmé la fermeture\n");
+        printf("ECHEC : Le serveur n'a pas confirmé la deconnexion\n");
     }
 
 }
 
-
+/**
+ * Envoie une requête de redirection au serveur maître.
+ * Retourne les informations de connexion de l'esclave assigné.
+ * @param rio : buffer de lecture rio
+ * @param clientfd : file descriptor de la connexion au maître
+ * @return serveur_esclave_t contenant l'ip et le port de l'esclave, port=0 en cas d'échec
+ */
 serveur_esclave_t cmd_connexion(rio_t *rio, int clientfd){
     request_t req;
     memset(&req, 0, sizeof(request_t));
     req.type = REQUETE_REDIRECTION;
-    printf("SUCCESS : Connexion au serveur maitre...\n");
     Rio_writen(clientfd, &req, sizeof(request_t));
 
     reponse_t rep;
     if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == REDIRECTION){
-        printf("SUCCESS :  Le serveur maitre a envoyé la redirection\n");
+        printf("Redirection reçu\n");
         return rep.serveur_esclave;
     } else {
-        printf("ECHEC : Le serveur n'a pas confirmé la connexion\n");
+        printf("ECHEC : Redirection non reçu\n");
         return (serveur_esclave_t){.ip = "", .port = 0};
     }
 }
 
-
+/**
+ * Envoie une requête LS au serveur avec les arguments dans nomFichier.
+ * Reçoit le résultat paquet par paquet et l'affiche directement sur stdout.
+ * @param rio : buffer de lecture rio
+ * @param req : requête à envoyer (contient les arguments ls dans nomFichier)
+ * @param clientfd : file descriptor de la connexion
+ */
 void cmd_ls(rio_t *rio, request_t req, int clientfd){
     req.type = LS;
     // nomFichier peut contenir les arguments ex: "-la"

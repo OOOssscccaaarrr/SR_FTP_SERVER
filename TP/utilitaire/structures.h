@@ -22,7 +22,6 @@ typedef enum {
 typedef struct {
     typereq_t type;
     char nomFichier[MAX_NAME_LEN];
-    int fd_cible;
     int num_paquet;
 } request_t;
 
