@@ -167,14 +167,14 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
 void cmd_ferme(rio_t *rio, request_t req, int clientfd){
     memset(&req, 0, sizeof(request_t));
     req.type = FERMETURE;
-    printf("Déconnexion du serveur ftp...\n");
+    printf("SUCCESS : Déconnexion du serveur ftp...\n");
     Rio_writen(clientfd, &req, sizeof(request_t));
 
     reponse_t rep;
     if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ACK){
-        printf("Le serveur a confirmé la fermeture\n");
+        printf("SUCCESS : Le serveur a confirmé la fermeture\n");
     } else {
-        printf("Le serveur n'a pas confirmé la fermeture\n");
+        printf("ECHEC : Le serveur n'a pas confirmé la fermeture\n");
     }
 
 }
@@ -184,15 +184,43 @@ serveur_esclave_t cmd_connexion(rio_t *rio, int clientfd){
     request_t req;
     memset(&req, 0, sizeof(request_t));
     req.type = REQUETE_REDIRECTION;
-    printf("Connexion au serveur maitre...\n");
+    printf("SUCCESS : Connexion au serveur maitre...\n");
     Rio_writen(clientfd, &req, sizeof(request_t));
 
     reponse_t rep;
     if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == REDIRECTION){
-        printf("Le serveur maitre a envoyé la redirection\n");
+        printf("SUCCESS :  Le serveur maitre a envoyé la redirection\n");
         return rep.serveur_esclave;
     } else {
-        printf("Le serveur n'a pas confirmé la connexion\n");
+        printf("ECHEC : Le serveur n'a pas confirmé la connexion\n");
         return (serveur_esclave_t){.ip = "", .port = 0};
     }
+}
+
+
+void cmd_ls(rio_t *rio, request_t req, int clientfd){
+    memset(&req, 0, sizeof(request_t));
+    req.type = LS;
+    printf("SUCCESS : Envoi de la commande LS au serveur ftp...\n");
+    Rio_writen(clientfd, &req, sizeof(request_t));
+
+    reponse_t rep;
+    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ACK){
+        printf("SUCCESS : Le serveur a confirmé la commande LS\n");
+        // TODO : implémenter la réception de la liste des fichiers
+    } else {
+        printf("ECHEC : Le serveur n'a pas confirmé la commande LS\n");
+        return;
+    }
+
+    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0){
+        printf("SUCCESS : Le serveur a confirmé la commande LS\n");
+        // TODO : implémenter la réception de la liste des fichiers
+    } else {
+        printf("ECHEC : Le serveur n'a pas confirmé la commande LS\n");
+        return;
+    }
+
+    dup2(clientfd, STDOUT_FILENO);
+
 }

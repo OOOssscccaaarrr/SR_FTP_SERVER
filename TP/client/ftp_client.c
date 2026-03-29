@@ -13,6 +13,8 @@ int lecture_ligne(char *buffer, size_t taille_buffer){
 
     if (strcmp(commande, "bye") == 0 || strcmp(commande, "q") == 0)
         return 1;
+    if (strcmp(commande, "ls") == 0)
+        return 3;
     if (strcmp(commande, "GET") != 0)
         return -1;
 
@@ -82,7 +84,9 @@ int main(int argc, char **argv)
             case 1:
                 cmd_ferme(&rio, req, clientfd);
                 connexion_ouverte = 0;
-
+                break;
+            case 3:
+                cmd_ls(&rio, req, clientfd);
                 break;
             default:
                 printf("ECHEC : Commande invalide. Entrez une commande au format 'GET <nomFichier>' ou 'bye'\n");

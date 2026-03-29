@@ -104,6 +104,7 @@ int main(int argc, char **argv)
             memset(&req, 0, sizeof req);
             memset(&rep, 0, sizeof rep);
         }
+        connecte = 1;
         afficher_message(numero_esclave, client_hostname, "Fermeture de la connexion", NULL);
         Close(connfd);
     }

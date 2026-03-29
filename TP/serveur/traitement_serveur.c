@@ -79,3 +79,12 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
         afficher_message(numero_serv, client_hostname, "Fichier envoyé", NULL);
         Close(fd_origine);
 }
+
+void traitement_ls(rio_t *rio, int connfd, request_t req, int numero_serv, char client_hostname[MAX_NAME_LEN]) {
+     reponse_t rep;
+     rep.reponse = ACK;
+     rep.nb_paquets = 0;
+     Rio_writen(connfd, &rep, sizeof(reponse_t));
+     // TODO : implémenter la commande LS
+     afficher_message(numero_serv, client_hostname, "Commande LS reçue, mais pas encore implémentée", NULL);
+}
