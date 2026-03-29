@@ -1,6 +1,7 @@
 #include "ftp_client.h"
 
 int lecture_ligne(char *buffer, size_t taille_buffer){
+    int val_retour = -1;
     char ligne[256];
     if (!fgets(ligne, sizeof(ligne), stdin))
         return -1;
@@ -9,18 +10,27 @@ int lecture_ligne(char *buffer, size_t taille_buffer){
     char commande[256];
     char nomFichier[256] = {0};
 
-    sscanf(ligne, "%s %s", commande, nomFichier);  // lit les deux mots d'un coup
+    sscanf(ligne, "%s", commande);  // lit seulement la commande
 
-    if (strcmp(commande, "bye") == 0 || strcmp(commande, "q") == 0)
-        return 1;
+    char *reste = strchr(ligne, ' ');
+    if (reste != NULL) {
+        reste++;
+        strncpy(nomFichier, reste, sizeof(nomFichier) - 1);
+    } else {
+        nomFichier[0] = '\0';
+    }
+
+    if (strcmp(commande, "bye") == 0)
+        val_retour = 1;
     if (strcmp(commande, "ls") == 0)
-        return 3;
-    if (strcmp(commande, "GET") != 0)
-        return -1;
+        val_retour = 3;
+    if (strcmp(commande, "GET") == 0)
+        val_retour = 0;
 
     strncpy(buffer, nomFichier, taille_buffer - 1);
     buffer[taille_buffer - 1] = '\0';
-    return 0;
+    printf("Commande : %s, Fichier : %s\n", commande, buffer);
+    return val_retour;
 }
 
 
@@ -75,10 +85,9 @@ int main(int argc, char **argv)
     while(connexion_ouverte){
         printf("client> ");
         int commande = lecture_ligne(buf, MAX_NAME_LEN);
-
+        strcpy(req.nomFichier, buf);
         switch (commande){
             case 0:
-                strcpy(req.nomFichier, buf);
                 cmd_get(&rio, req, clientfd);
                 break;
             case 1:

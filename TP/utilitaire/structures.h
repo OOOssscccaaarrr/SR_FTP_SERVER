@@ -30,7 +30,6 @@ typedef struct {
 typedef enum{
     ACK = 0,
     ENVOIE_FICHIER = 1,
-    ENVOIE_TERMINER = 2,
     REDIRECTION = 3,
     ERREUR_SERVEUR = 10,
     ERREUR_REQUETE_INVALIDE = 11,

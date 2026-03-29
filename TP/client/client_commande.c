@@ -19,6 +19,7 @@ int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
         *flog = Open(nomFichierLog, O_RDWR, S_IRUSR | S_IWUSR);
         if (*flog < 0){
             printf("ECHEC : Impossible d'ouvrir le fichier log %s\n", nomFichierLog);
+            remove(nomFichierLog);
             return -1;
         }
         lseek(*flog, 0, SEEK_SET);
@@ -28,6 +29,7 @@ int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
             return dernier_paquet_recu + 1;
         } else {        
             printf("ECHEC : Impossible de lire le fichier log pour la reprise de paquets\n");
+            remove(nomFichierLog);
             return 0; // vide
         }
     }
@@ -35,6 +37,7 @@ int checklog(int *flog, char nomFichierLog[MAX_NAME_LEN + 5]){
         *flog = Open(nomFichierLog, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
         if (*flog < 0){
             printf("ECHEC : Impossible d'ouvrir le fichier log %s\n", nomFichierLog);
+            remove(nomFichierLog);
             return -1;
         }
         return 0;
@@ -78,10 +81,6 @@ int reception_fichier(char nomFichier[MAX_NAME_LEN], reponse_t rep, int clientfd
                 sprintf(contenu_log, "%d", rep.paquet.numero_paquet);
                 lseek(fdlog, 0 , SEEK_SET);
                 write(fdlog, contenu_log, strlen(contenu_log));   
-            }
-            else if (rep.reponse == ENVOIE_TERMINER){
-                printf("SUCCESS : Envoi du fichier terminé\n");
-                break;
             }
             else {
                 gestion_err_serveur(rep.reponse);
@@ -150,7 +149,7 @@ void cmd_get(rio_t *rio, request_t req, int clientfd){
                 double z_b = (x_b / 1024.0) / (y_t > 0 ? y_t :1);
                 printf("Reçu %d bytes en %f secondes (%f Kbytes/s). \n", x_b, y_t, z_b);
             }
-        } else if (rep.reponse == ENVOIE_FICHIER ||rep.reponse == ENVOIE_TERMINER){
+        } else if (rep.reponse == ENVOIE_FICHIER){
             printf("ECHEC : pas de ACK\n");
             remove(nomFichierLog);
         }
@@ -199,28 +198,25 @@ serveur_esclave_t cmd_connexion(rio_t *rio, int clientfd){
 
 
 void cmd_ls(rio_t *rio, request_t req, int clientfd){
-    memset(&req, 0, sizeof(request_t));
     req.type = LS;
-    printf("SUCCESS : Envoi de la commande LS au serveur ftp...\n");
+    // nomFichier peut contenir les arguments ex: "-la"
     Rio_writen(clientfd, &req, sizeof(request_t));
 
     reponse_t rep;
-    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ACK){
-        printf("SUCCESS : Le serveur a confirmé la commande LS\n");
-        // TODO : implémenter la réception de la liste des fichiers
-    } else {
-        printf("ECHEC : Le serveur n'a pas confirmé la commande LS\n");
+    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) <= 0 || rep.reponse != ACK){
+        printf("ECHEC : pas de ACK\n");
         return;
     }
 
-    if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0){
-        printf("SUCCESS : Le serveur a confirmé la commande LS\n");
-        // TODO : implémenter la réception de la liste des fichiers
-    } else {
-        printf("ECHEC : Le serveur n'a pas confirmé la commande LS\n");
-        return;
+    int nbPaquet = rep.nb_paquets;
+    for (int i = 0; i < nbPaquet; i++){
+        if (Rio_readnb(rio, &rep, sizeof(reponse_t)) > 0 && rep.reponse == ENVOIE_FICHIER){
+            // Afficher directement sur stdout au lieu d'écrire dans un fichier
+            write(STDOUT_FILENO, rep.paquet.buffer, rep.paquet.taille_buffer);
+        } else {
+            printf("ECHEC : erreur réception paquet ls\n");
+            break;
+        }
     }
-
-    dup2(clientfd, STDOUT_FILENO);
 
 }

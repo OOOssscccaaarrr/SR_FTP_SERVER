@@ -94,7 +94,8 @@ int main(int argc, char **argv)
                 connecte = 0;
                 break;
             case LS:
-                /* code */
+                afficher_message(numero_esclave, client_hostname, "nom du fichier demandé", req.nomFichier);
+                traitement_ls(&rio,connfd, req, numero_esclave, client_hostname);
                 break;
             default:
                 reponse_err(connfd, ERREUR_REQUETE_INVALIDE);

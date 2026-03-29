@@ -81,10 +81,39 @@ void traitement_get(rio_t *rio, int connfd, request_t req, int numero_serv, char
 }
 
 void traitement_ls(rio_t *rio, int connfd, request_t req, int numero_serv, char client_hostname[MAX_NAME_LEN]) {
-     reponse_t rep;
-     rep.reponse = ACK;
-     rep.nb_paquets = 0;
-     Rio_writen(connfd, &rep, sizeof(reponse_t));
-     // TODO : implémenter la commande LS
-     afficher_message(numero_serv, client_hostname, "Commande LS reçue, mais pas encore implémentée", NULL);
+    char cmd[MAX_NAME_LEN + 4];
+    if (strlen(req.nomFichier) > 0)
+        snprintf(cmd, sizeof(cmd), "ls %s", req.nomFichier);
+    else
+        snprintf(cmd, sizeof(cmd), "ls");
+
+    char resultat[65536] = {0};
+    int total = 0, n;
+
+    FILE *fp = popen(cmd, "r");
+    if (fp == NULL) {
+        reponse_err(connfd, ERREUR_SERVEUR);
+        return;
+    }
+    while ((n = fread(resultat + total, 1, sizeof(resultat) - total, fp)) > 0)
+        total += n;
+    pclose(fp);
+
+    reponse_t rep;
+    rep.reponse = ACK;
+    rep.nb_paquets = total / MAX_PAQ_LEN + (total % MAX_PAQ_LEN != 0);
+    Rio_writen(connfd, &rep, sizeof(reponse_t));
+
+    int offset = 0, compteur = 0;
+    while (offset < total) {
+        int taille = (total - offset < MAX_PAQ_LEN) ? total - offset : MAX_PAQ_LEN;
+        paquet_t paquet;
+        paquet.taille_buffer = taille;
+        paquet.numero_paquet = compteur++;
+        memcpy(paquet.buffer, resultat + offset, taille);
+        rep.paquet = paquet;
+        rep.reponse = ENVOIE_FICHIER;
+        Rio_writen(connfd, &rep, sizeof(reponse_t));
+        offset += taille;
+    }
 }
